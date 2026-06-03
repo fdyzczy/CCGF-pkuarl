@@ -1,12 +1,12 @@
-% Batch-reaction example using only the proposed CC truncation method.
+% Batch-reaction example with unconstrained and CC-constrained filters.
 
 rng(rand_seed);
 
-constr_mode = lower(string(constr_mode));
-if ~startsWith(constr_mode, "cc")
-    error('code_openacc keeps only the proposed CC method. Unsupported method: %s', constr_mode);
+delta = risk_threshold;
+is_constrained = string(method_name) == "CC";
+if ~(is_constrained || string(method_name) == "UN")
+    error('Unsupported method: %s', string(method_name));
 end
-constr_mode = "cc";
 
 dt = 0.1;
 kr = 0.16;
@@ -14,7 +14,6 @@ K = 20;
 Q = 0.002^2 * eye(2);
 R = 0.5^2;
 
-delta = 1e-4;
 Nsample_viol = 100000;
 
 f = @(x) [ ...
@@ -116,18 +115,21 @@ for mc = 1:Nmc
             w0 = filter.ModelProbabilities;
             mu = mu0;
             Sigma = Sigma0;
-            for i = 1:mixNum
-                [mu(:, i), Sigma(:, :, i)] = BranchAndBound_pruned( ...
-                    mu(:, i), Sigma(:, :, i), obstacles, delta_set);
-            end
-            weight = weight_alloc(mu0, mu, Sigma0, Sigma, w0);
 
-            for i = 1:length(filter.ModelProbabilities)
-                filter.TrackingFilters{i}.State = mu(:, i);
-                filter.TrackingFilters{i}.StateCovariance = Sigma(:, :, i);
+            if is_constrained
+                for i = 1:mixNum
+                    [mu(:, i), Sigma(:, :, i)] = BranchAndBound_pruned( ...
+                        mu(:, i), Sigma(:, :, i), obstacles, delta_set);
+                end
+                weight = weight_alloc(mu0, mu, Sigma0, Sigma, w0);
+
+                for i = 1:length(filter.ModelProbabilities)
+                    filter.TrackingFilters{i}.State = mu(:, i);
+                    filter.TrackingFilters{i}.StateCovariance = Sigma(:, :, i);
+                end
+                filter.ModelProbabilities = weight;
             end
-            filter.ModelProbabilities = weight;
-        else
+        elseif is_constrained
             [filter.State, filter.StateCovariance] = BranchAndBound_pruned( ...
                 filter.State, filter.StateCovariance, obstacles, delta_set);
         end
@@ -189,7 +191,7 @@ rmse_total = mean(rmse_single);
 rmse_std = std(rmse_single);
 
 disp('-------------------Simulation Ends-----------------------')
-fprintf('Filter: %s-%s\n', constr_mode, string(filter_mode));
+fprintf('Filter: %s-%s\n', method_name, string(filter_mode));
 fprintf('Risk Threshold: %g\n', delta);
 fprintf('RMSE: %.4f\n', rmse_total);
 fprintf('Computational Time: %.4f ms\n', calTime * 1000);

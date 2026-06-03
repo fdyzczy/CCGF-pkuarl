@@ -25,6 +25,43 @@ for j = 1:N_c
 end
 fixed_obs = find(is_single_edge);
 
+for k = 1:length(fixed_obs)
+    j = fixed_obs(k);
+
+    a_try = Obstacles(j).A(:,1);
+    b_try = Obstacles(j).b(1);
+    delta_try = risk_thresholds(j);
+
+    [mu_try, Sigma_try,] = CCTruncation(mu_0, Sigma_0, a_try, b_try, delta_try);
+    val_try = gaussKLD(mu_try, mu_0, Sigma_try, Sigma_0);
+
+    [is_global_feasible, valid_pairs] = check_global_feasibility(...
+        mu_try, Sigma_try, Obstacles, z_table, []);
+
+    if is_global_feasible
+        if verbose
+            fprintf('  [Heuristic] Solution from Obstacle %d satisfies ALL constraints! Early exit.\n', j);
+        end
+
+        mu_star = mu_try;
+        Sigma_star = Sigma_try;
+        J_ub = val_try;
+        best_constraint_pairs = valid_pairs;
+
+        info.status = 'Solved (Single-Edge Heuristic)';
+        info.iterations = 0;
+        info.num_solved = k; % 算作解了 k 次
+        info.best_constraint_pairs = best_constraint_pairs;
+        % ... 填充其他 info ...
+        return;
+    end
+end
+
+if verbose
+    fprintf('  No single-constraint solution is globally feasible. Proceeding to BnB...\n');
+end
+
+
 if verbose
     fprintf('Running single-edge root setup (%d fixed constraints)...\n', numel(fixed_obs));
 end

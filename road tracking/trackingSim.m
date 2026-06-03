@@ -1,26 +1,15 @@
-% Road-tracking example using only the proposed CC truncation method.
+% Road-tracking example with unconstrained and CC-constrained filters.
 
 rng(1);
 
-delta_init = 0.05;
-switch string(constr_mode)
-    case "CC1"
-        delta_init = 0.0005;
-    case "CC2"
-        delta_init = 0.005;
-    case "CC3"
-        delta_init = 0.05;
-    case "CC4"
-        delta_init = 0.5;
-    case "CC"
-        delta_init = 0.05;
-    otherwise
-        error('code_openacc keeps only the proposed CC method. Unsupported method: %s', string(constr_mode));
+delta = risk_threshold;
+is_constrained = string(method_name) == "CC";
+if ~(is_constrained || string(method_name) == "UN")
+    error('Unsupported method: %s', string(method_name));
 end
-constr_mode = "CC";
 
-delta_set = delta_init * ones(1, length(constr)) / length(obstacles);
-Nsample_viol = 1000;
+delta_set = delta * ones(1, length(constr)) / length(obstacles);
+Nsample_viol = 100000;
 
 dt = 0.5;
 K = 50;
@@ -109,18 +98,20 @@ for mc = 1:Nmc
             mu = mu0;
             Sigma = Sigma0;
 
-            for i = 1:mixNum
-                [mu(:, i), Sigma(:, :, i)] = BranchAndBound_pruned( ...
-                    mu(:, i), Sigma(:, :, i), obstacles, delta_set, mosek_data_list);
-            end
-            weight = weight_alloc(mu0, mu, Sigma0, Sigma, w0);
+            if is_constrained
+                for i = 1:mixNum
+                    [mu(:, i), Sigma(:, :, i)] = BranchAndBound_pruned( ...
+                        mu(:, i), Sigma(:, :, i), obstacles, delta_set, mosek_data_list);
+                end
+                weight = weight_alloc(mu0, mu, Sigma0, Sigma, w0);
 
-            for i = 1:length(filter.ModelProbabilities)
-                filter.TrackingFilters{i}.State = mu(:, i);
-                filter.TrackingFilters{i}.StateCovariance = Sigma(:, :, i);
+                for i = 1:length(filter.ModelProbabilities)
+                    filter.TrackingFilters{i}.State = mu(:, i);
+                    filter.TrackingFilters{i}.StateCovariance = Sigma(:, :, i);
+                end
+                filter.ModelProbabilities = weight;
             end
-            filter.ModelProbabilities = weight;
-        else
+        elseif is_constrained
             [filter.State, filter.StateCovariance] = BranchAndBound_pruned( ...
                 filter.State, filter.StateCovariance, obstacles, delta_set, mosek_data_list);
         end
@@ -208,8 +199,8 @@ vioProb_total = mean(violProb_single);
 vioProb_max = max(violProb_single);
 
 disp('-------------------Simulation Ends-----------------------')
-fprintf('Filter: %s-%s\n', constr_mode, string(filter_mode));
-fprintf('Risk Threshold: %g\n', delta_init);
+fprintf('Filter: %s-%s\n', method_name, string(filter_mode));
+fprintf('Risk Threshold: %g\n', delta);
 fprintf('RMSE: %.4f\n', rmse_total);
 fprintf('RMSE_position: %.4f\n', rmse_x_total);
 fprintf('RMSE_angle: %.4f\n', rmse_theta_total);

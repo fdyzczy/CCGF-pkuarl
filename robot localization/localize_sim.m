@@ -1,23 +1,13 @@
-% Robot-localization example using only the proposed CC truncation method.
+% Robot-localization example with unconstrained and CC-constrained filters.
 
 rand_seed = 32;
 rng(rand_seed);
 
-switch string(constr_mode)
-    case "CC1"
-        delta_init = 0.0005;
-    case "CC2"
-        delta_init = 0.005;
-    case "CC3"
-        delta_init = 0.05;
-    case "CC4"
-        delta_init = 0.5;
-    case "CC"
-        delta_init = 0.005;
-    otherwise
-        error('code_openacc keeps only the proposed CC method. Unsupported method: %s', string(constr_mode));
+delta = risk_threshold;
+is_constrained = string(method_name) == "CC";
+if ~(is_constrained || string(method_name) == "UN")
+    error('Unsupported method: %s', string(method_name));
 end
-constr_mode = "CC";
 
 FOV = 6;
 scene_size = 60 * sqrt(num_landmarks / 16);
@@ -168,7 +158,7 @@ for mc = 1:Nmc
             totalTime(mc) = totalTime(mc) + toc;
             continue;
         end
-        delta_set = delta_init * ones(1, length(obstacles)) / length(obstacles);
+        delta_set = delta * ones(1, length(obstacles)) / length(obstacles);
 
         if string(filter_mode) == "GSF"
             mu0 = zeros(2, mixNum);
@@ -181,23 +171,25 @@ for mc = 1:Nmc
             mu = mu0;
             Sigma = Sigma0;
             ExpandNodeNum(mc, k) = 0;
-            info = cell(1, mixNum);
 
-            for i = 1:mixNum
-                [mu(:, i), Sigma(:, :, i), ~, info{i}] = BranchAndBound_pruned( ...
-                    mu(:, i), Sigma(:, :, i), obstacles, delta_set, mosek_data_list);
-                ExpandNodeNum(mc, k) = ExpandNodeNum(mc, k) + info{i}.iterations;
+            if is_constrained
+                info = cell(1, mixNum);
+                for i = 1:mixNum
+                    [mu(:, i), Sigma(:, :, i), ~, info{i}] = BranchAndBound_pruned( ...
+                        mu(:, i), Sigma(:, :, i), obstacles, delta_set, mosek_data_list);
+                    ExpandNodeNum(mc, k) = ExpandNodeNum(mc, k) + info{i}.iterations;
+                end
+
+                ExpandNodeNum(mc, k) = ExpandNodeNum(mc, k) / mixNum;
+                weight = weight_alloc(mu0, mu, Sigma0, Sigma, w0);
+
+                for i = 1:length(filter.ModelProbabilities)
+                    filter.TrackingFilters{i}.State = mu(:, i);
+                    filter.TrackingFilters{i}.StateCovariance = Sigma(:, :, i);
+                end
+                filter.ModelProbabilities = weight;
             end
-
-            ExpandNodeNum(mc, k) = ExpandNodeNum(mc, k) / mixNum;
-            weight = weight_alloc(mu0, mu, Sigma0, Sigma, w0);
-
-            for i = 1:length(filter.ModelProbabilities)
-                filter.TrackingFilters{i}.State = mu(:, i);
-                filter.TrackingFilters{i}.StateCovariance = Sigma(:, :, i);
-            end
-            filter.ModelProbabilities = weight;
-        else
+        elseif is_constrained
             [filter.State, filter.StateCovariance, ~, info] = BranchAndBound_pruned( ...
                 filter.State, filter.StateCovariance, obstacles, delta_set, mosek_data_list);
             ExpandNodeNum(mc, k) = info.iterations;
@@ -285,8 +277,8 @@ ExpandNodeNum_std = std(mean(ExpandNodeNum, 2));
 
 disp('-------------------Simulation Ends-----------------------')
 fprintf('landmark number: %f\n', num_landmarks);
-fprintf('Filter: %s-%s\n', constr_mode, string(filter_mode));
-fprintf('Risk Threshold: %g\n', delta_init);
+fprintf('Filter: %s-%s\n', method_name, string(filter_mode));
+fprintf('Risk Threshold: %g\n', delta);
 fprintf('RMSE: %.4f\n', rmse_total);
 fprintf('Computational Time: %.4f ms\n', calTime * 1000);
 fprintf('Variance: %f\n', variance_total);
