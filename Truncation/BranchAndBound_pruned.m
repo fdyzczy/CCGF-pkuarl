@@ -50,9 +50,8 @@ for k = 1:length(fixed_obs)
 
         info.status = 'Solved (Single-Edge Heuristic)';
         info.iterations = 0;
-        info.num_solved = k; % 算作解了 k 次
+        info.num_solved = k; % Count k solved subproblems.
         info.best_constraint_pairs = best_constraint_pairs;
-        % ... 填充其他 info ...
         return;
     end
 end

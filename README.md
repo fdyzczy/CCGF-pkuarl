@@ -49,15 +49,11 @@ two filtering modes, not competing truncation methods.
    addpath('C:\Program Files\Mosek\11.0\toolbox\r2017a');
    ```
 
-3. Enter the project directory in MATLAB.
+3. Run an experiment entry script.
 
-   ```matlab
-   cd('path/to/code_openacc')
-   addpath(genpath(pwd))
-   ```
-
-   Each experiment entry script also calls `init_code_openacc.m`, so the scripts
-   can be run from the package root or from their own experiment folders.
+   Each experiment entry script calls `init_code_openacc.m`, which locates the
+   package root, adds the package folders to the MATLAB path, and checks that
+   MOSEK is available.
 
 ## Running Experiments
 
@@ -74,11 +70,6 @@ cd('path/to/code_openacc/batch reaction')
 total_batch_sim
 ```
 
-Default settings:
-
-- `risk_threshold = 1e-2`
-- `Nmc = 10`
-
 The script prints RMSE, computation time, average violation probability, and
 maximum violation probability tables for `UN` and `CC`.
 
@@ -91,16 +82,10 @@ cd('path/to/code_openacc/robot localization')
 total_localize_sim
 ```
 
-Default settings:
-
-- `risk_threshold = 0.5`
-- `Nmc = 100`
-- `num_landmarks = 16`
-
 The script prints average computation time, RMSE, average violation probability,
 and maximum violation probability tables for `UN` and `CC`.
 
-### Road Tracking Experiment
+### Real-world Tracking Experiment
 
 Run the aggregate road-tracking evaluation:
 
@@ -108,11 +93,6 @@ Run the aggregate road-tracking evaluation:
 cd('path/to/code_openacc/road tracking')
 total_trackingSim
 ```
-
-Default settings:
-
-- `risk_threshold = 0.0005`
-- `Nmc = 2`
 
 The script runs `exp_data1.mat` through `exp_data5.mat` and prints aggregate
 tables for computation time, position RMSE, heading RMSE, velocity RMSE, average
@@ -141,18 +121,6 @@ robot localization/mosek_data_list2.mat
 These template files are included with the release and are required by the
 corresponding entry scripts.
 
-## Repository Structure
-
-```text
-code_openacc/
-  Truncation/             Proposed chance-constrained truncation routines
-  batch reaction/         Batch reaction simulation
-  robot localization/     Landmark-based localization simulation
-  road tracking/          Real-world road-tracking experiment
-  gaussKLD.m              Gaussian KL-divergence helper
-  init_code_openacc.m     Package path and MOSEK initializer
-```
-
 ## Outputs
 
 Console tables summarize the main numerical results:
@@ -160,7 +128,7 @@ Console tables summarize the main numerical results:
 - RMSE measures estimation accuracy; lower is better.
 - Computation time is reported in milliseconds per filtering step; lower is
   faster.
-- Violation probability estimates how often sampled states violate the
+- Maximum Violation probability estimates how often sampled states violate the
   constraints. For `CC`, it should be interpreted relative to `risk_threshold`;
   for `UN`, it shows the unconstrained filter's constraint violations.
 
